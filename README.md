@@ -83,8 +83,14 @@ Push.onPooshTokenRef(function (info) {
 > it only *receives* the token.
 
 See the [POOSH Backend Integration](INSTALLATION.md#poosh-backend-integration-optional)
-section of INSTALLATION.md for the full API (`isPooshEnabled`, `getPooshTokenRef`,
+section of INSTALLATION.md for the full plugin-side API (`isPooshEnabled`, `getPooshTokenRef`,
 `onPooshTokenRef`, the `wizzopush.tokenref` DOM event, and install-time variables).
+
+> 🏗️ **Wiring a whole new app (mobile + web + server) to POOSH?**
+> [**POOSH_INTEGRATION.md**](POOSH_INTEGRATION.md) is the full end-to-end recipe —
+> tenant `firebase_push` channel setup, the autonomous mobile flow, the server-registered
+> web flow, the `token_ref` schema, per-user vs broadcast sending, and the critical
+> `channelType: 'push_app'` gotcha. Battle-tested on Media Radar.
 
 ---
 
