@@ -1,0 +1,13 @@
+# Android / Gradle build cache (not part of the plugin source)
+src/android/.gradle/
+src/android/build/
+src/android/.idea/
+*.iml
+
+# Node
+node_modules/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.log

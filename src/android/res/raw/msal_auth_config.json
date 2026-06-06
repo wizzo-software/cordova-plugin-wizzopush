@@ -1,0 +1,14 @@
+{
+  "client_id": "b381881a-e94c-4a86-a804-1fdc249e3996",
+  "authorization_user_agent": "DEFAULT",
+  "redirect_uri": "msauth://coffee.sunday.app/dJzDrOC7JjapPCL0s%2BLcPoBrs%2B4%3D",
+  "account_mode": "MULTIPLE",
+  "authorities": [
+    {
+      "type": "AAD",
+      "audience": {
+        "type": "AzureADandPersonalMicrosoftAccount"
+      }
+    }
+  ]
+}

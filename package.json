@@ -1,0 +1,36 @@
+{
+  "name": "cordova-plugin-wizzopush",
+  "version": "1.0.0",
+  "description": "Cordova plugin for push notifications - drop-in replacement for FirebaseX",
+  "cordova": {
+    "id": "cordova-plugin-wizzopush",
+    "platforms": [
+      "android",
+      "ios"
+    ]
+  },
+  "keywords": [
+    "ecosystem:cordova",
+    "cordova-android",
+    "cordova-ios",
+    "firebase",
+    "push",
+    "notifications",
+    "fcm"
+  ],
+  "author": "Wizzo Software",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wizzo-software/cordova-plugin-wizzopush"
+  },
+  "engines": {
+    "cordovaDependencies": {
+      "1.0.0": {
+        "cordova": ">=12.0.0",
+        "cordova-android": ">=14.0.0",
+        "cordova-ios": ">=7.0.0"
+      }
+    }
+  }
+}

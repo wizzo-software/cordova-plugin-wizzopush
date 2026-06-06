@@ -1,0 +1,220 @@
+<?xml version='1.0' encoding='utf-8'?>
+<plugin id="cordova-plugin-wizzopush" version="1.0.0"
+    xmlns="http://apache.org/cordova/ns/plugins/1.0"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    
+    <name>WizzoPush</name>
+    <description>Cordova plugin for push notifications - drop-in replacement for FirebaseX</description>
+    <license>MIT</license>
+    <author>Wizzo Software</author>
+    
+    <engines>
+        <engine name="cordova" version=">=12" />
+        <engine name="cordova-android" version=">=14" />
+        <engine name="cordova-ios" version=">=7" />
+    </engines>
+
+    <!--
+        Optional POOSH backend integration.
+        POOSH is OFF by default and is enabled entirely at RUNTIME by the app:
+            WizzoPush.configurePoosh({ enabled: true, apiKey: 'YOUR_POOSH_API_KEY' })
+        There are intentionally no <preference> plugin variables for POOSH — the
+        app holds its own POOSH config (api key / base url) and passes it to
+        configurePoosh(), so installing the plugin requires no POOSH variables.
+        The POOSH base url defaults to https://api.poosh.work inside the plugin.
+    -->
+
+    <!-- Hook to auto-copy GoogleService-Info.plist / google-services.json -->
+    <hook type="after_platform_add" src="hooks/copy_google_services.js" />
+    <hook type="after_prepare" src="hooks/copy_google_services.js" />
+
+    <!-- ===================== ANDROID ===================== -->
+    <platform name="android">
+
+        <!-- JS Modules -->
+        <js-module name="WizzoPush" src="www/WizzoPush.js">
+            <clobbers target="WizzoPush" />
+            <clobbers target="FirebasePlugin" />
+        </js-module>
+        <!-- Optional POOSH backend integration (required by WizzoPush.js) -->
+        <js-module name="WizzoPushPoosh" src="www/WizzoPushPoosh.js">
+            <clobbers target="WizzoPushPoosh" />
+        </js-module>
+
+        <!-- Cordova config -->
+        <config-file target="config.xml" parent="/*">
+            <preference name="GradlePluginGoogleServicesEnabled" value="true" />
+        </config-file>
+        
+        <config-file parent="/*" target="res/xml/config.xml">
+            <feature name="WizzoPush">
+                <param name="android-package" value="coffee.sunday.wizzopush.WizzoPushPlugin"/>
+                <param name="onload" value="true" />
+            </feature>
+        </config-file>
+        
+        <!-- Permissions -->
+        <config-file target="AndroidManifest.xml" parent="/*">
+            <uses-permission android:name="android.permission.INTERNET" />
+            <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+        </config-file>
+        
+        <!-- FCM Service - exported=true with permission for Google Play Services -->
+        <config-file target="AndroidManifest.xml" parent="application">
+            <service 
+                android:name="coffee.sunday.wizzopush.WizzoFirebaseMessagingService"
+                android:exported="true"
+                android:permission="com.google.android.c2dm.permission.SEND">
+                <intent-filter>
+                    <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+                </intent-filter>
+            </service>
+            
+            <!-- Default notification channel - matches server's channel_id -->
+            <meta-data 
+                android:name="com.google.firebase.messaging.default_notification_channel_id" 
+                android:value="default"/>
+            
+            <!-- MSAL BrowserTabActivity for Microsoft auth redirect -->
+            <activity
+                android:name="com.microsoft.identity.client.BrowserTabActivity"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.VIEW" />
+                    <category android:name="android.intent.category.DEFAULT" />
+                    <category android:name="android.intent.category.BROWSABLE" />
+                    <data
+                        android:scheme="msauth"
+                        android:host="coffee.sunday.app"
+                        android:path="/dJzDrOC7JjapPCL0s+LcPoBrs+4=" />
+                </intent-filter>
+            </activity>
+        </config-file>
+        
+        <!-- Source files -->
+        <source-file src="src/android/WizzoPushPlugin.java" target-dir="src/coffee/sunday/wizzopush"/>
+        <source-file src="src/android/WizzoFirebaseMessagingService.java" target-dir="src/coffee/sunday/wizzopush"/>
+        <source-file src="src/android/WizzoPushMessageReceiver.java" target-dir="src/coffee/sunday/wizzopush"/>
+        <source-file src="src/android/WizzoPushMessageReceiverManager.java" target-dir="src/coffee/sunday/wizzopush"/>
+        
+        <!-- MSAL config -->
+        <resource-file src="src/android/res/raw/msal_auth_config.json" target="res/raw/msal_auth_config.json" />
+        
+        <!-- FirebaseX compatibility classes (allows VoIP plugin to work without changes) -->
+        <source-file src="src/android/compat/FirebasePluginMessageReceiver.java" target-dir="src/org/apache/cordova/firebase"/>
+        <source-file src="src/android/compat/FirebasePluginMessageReceiverManager.java" target-dir="src/org/apache/cordova/firebase"/>
+        
+        <!-- Gradle dependencies -->
+        <framework src="src/android/build.gradle" custom="true" type="gradleReference" />
+        
+        <!-- Firebase dependencies -->
+        <preference name="FIREBASE_MESSAGING_VERSION" default="24.0.0" />
+        <preference name="FIREBASE_ANALYTICS_VERSION" default="22.0.0" />
+        <preference name="FIREBASE_AUTH_VERSION" default="23.0.0" />
+        <preference name="GOOGLE_AUTH_VERSION" default="21.0.0" />
+        <preference name="MSAL_VERSION" default="8.+" />
+        
+        <framework src="com.google.firebase:firebase-messaging:$FIREBASE_MESSAGING_VERSION" />
+        <framework src="com.google.firebase:firebase-analytics:$FIREBASE_ANALYTICS_VERSION" />
+        <framework src="com.google.firebase:firebase-auth:$FIREBASE_AUTH_VERSION" />
+        <framework src="com.google.android.gms:play-services-auth:$GOOGLE_AUTH_VERSION" />
+        <framework src="com.microsoft.identity.client:msal:$MSAL_VERSION" />
+        
+    </platform>
+
+    <!-- ===================== iOS ===================== -->
+    <platform name="ios">
+
+        <!-- JS Modules -->
+        <js-module name="WizzoPush" src="www/WizzoPush.js">
+            <clobbers target="WizzoPush" />
+            <clobbers target="FirebasePlugin" />
+        </js-module>
+        <!-- Optional POOSH backend integration (required by WizzoPush.js) -->
+        <js-module name="WizzoPushPoosh" src="www/WizzoPushPoosh.js">
+            <clobbers target="WizzoPushPoosh" />
+        </js-module>
+
+        <!-- Cordova config -->
+        <config-file target="config.xml" parent="/*">
+            <feature name="WizzoPush">
+                <param name="ios-package" value="WizzoPushPlugin" />
+                <param name="onload" value="true" />
+            </feature>
+        </config-file>
+        
+        <!-- APNs entitlements -->
+        <config-file target="*/Entitlements-Debug.plist" parent="aps-environment">
+            <string>development</string>
+        </config-file>
+        <config-file target="*/Entitlements-Release.plist" parent="aps-environment">
+            <string>production</string>
+        </config-file>
+
+        <!-- MSAL keychain sharing (REQUIRED for Microsoft Sign-In token cache) -->
+        <config-file target="*/Entitlements-Debug.plist" parent="keychain-access-groups">
+            <array>
+                <string>$(AppIdentifierPrefix)com.microsoft.adalcache</string>
+            </array>
+        </config-file>
+        <config-file target="*/Entitlements-Release.plist" parent="keychain-access-groups">
+            <array>
+                <string>$(AppIdentifierPrefix)com.microsoft.adalcache</string>
+            </array>
+        </config-file>
+
+        <!-- Background modes -->
+        <config-file target="*-Info.plist" parent="UIBackgroundModes">
+            <array>
+                <string>remote-notification</string>
+            </array>
+        </config-file>
+        
+        <!-- Google Sign-In URL Scheme is configured in app's config.xml -->
+
+        <!-- MSAL (Microsoft Sign-In): redirect URL scheme = msauth.<bundle_id> -->
+        <config-file target="*-Info.plist" parent="CFBundleURLTypes">
+            <array>
+                <dict>
+                    <key>CFBundleURLSchemes</key>
+                    <array>
+                        <string>msauth.sunday.com</string>
+                    </array>
+                </dict>
+            </array>
+        </config-file>
+        <!-- MSAL: allow querying Microsoft Authenticator broker schemes -->
+        <config-file target="*-Info.plist" parent="LSApplicationQueriesSchemes">
+            <array>
+                <string>msauthv2</string>
+                <string>msauthv3</string>
+            </array>
+        </config-file>
+
+        <!-- Source files -->
+        <header-file src="src/ios/WizzoPushPlugin.h" />
+        <source-file src="src/ios/WizzoPushPlugin.m" />
+        <header-file src="src/ios/AppDelegate+WizzoPush.h" />
+        <source-file src="src/ios/AppDelegate+WizzoPush.m" />
+        
+        <!-- Frameworks -->
+        <framework src="UserNotifications.framework" />
+        
+        <!-- Firebase pods -->
+        <podspec>
+            <config>
+                <source url="https://cdn.cocoapods.org/"/>
+            </config>
+            <pods use-frameworks="true">
+                <pod name="FirebaseCore" spec="~> 11.0"/>
+                <pod name="FirebaseMessaging" spec="~> 11.0"/>
+                <pod name="FirebaseAnalytics" spec="~> 11.0"/>
+                <pod name="FirebaseAuth" spec="~> 11.0"/>
+                <pod name="GoogleSignIn" spec="~> 7.0"/>
+                <pod name="MSAL" spec="~> 2.11"/>
+            </pods>
+        </podspec>
+        
+    </platform>
+    
+</plugin>
