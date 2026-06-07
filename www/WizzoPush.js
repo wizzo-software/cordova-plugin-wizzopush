@@ -56,6 +56,26 @@ var wasTapped = function(notification) {
     );
 };
 
+// Extract a router-navigable path from a push payload.
+// Checks `link` first (relative path), then parses `url` (full URL) to extract pathname.
+var extractLink = function(payload) {
+    if (!payload) return null;
+    if (payload.link && payload.link !== '') return payload.link;
+    if (payload.url && payload.url !== '') {
+        try {
+            var u = new URL(payload.url);
+            return u.pathname + u.search + u.hash;
+        } catch (_) {
+            return payload.url.replace(/^https?:\/\/[^/]+/, '') || null;
+        }
+    }
+    return null;
+};
+
+// Navigation callback set via configureNavigation(). When set, tapped
+// notifications auto-navigate without the host app needing any click handler.
+var _navigateTo = null;
+
 // Local mirror of the token's topic subscriptions, so POOSH topic targeting can be
 // kept in sync. FCM topic broadcasts are independent and keep working regardless.
 var subscribedTopics = {};
@@ -143,6 +163,13 @@ var WizzoPush = {
             if (poosh.isEnabled() && wasTapped(message)) {
                 poosh.reportClick(message);
             }
+            // Auto-navigate on tap if configureNavigation was called
+            if (_navigateTo && wasTapped(message)) {
+                var link = extractLink(message);
+                if (link && link !== '/') {
+                    setTimeout(function() { _navigateTo(link); }, 300);
+                }
+            }
             if (success) success(message);
         }, error, "WizzoPush", "onMessageReceived", []);
     },
@@ -158,6 +185,13 @@ var WizzoPush = {
             // POOSH so opens that bypass onMessageReceived are still counted.
             if (payload && poosh.isEnabled()) {
                 poosh.reportClick(payload);
+            }
+            // Auto-navigate on cold start if configureNavigation was called
+            if (payload && _navigateTo) {
+                var link = extractLink(payload);
+                if (link && link !== '/') {
+                    setTimeout(function() { _navigateTo(link); }, 1500);
+                }
             }
             if (success) success(payload);
         }, error, "WizzoPush", "getInitialPushPayload", []);
@@ -434,6 +468,24 @@ var WizzoPush = {
      */
     authenticateUserWithMicrosoft: function(success, error) {
         exec(success, error, "WizzoPush", "authenticateUserWithMicrosoft", []);
+    },
+
+    // ==================== Navigation ====================
+
+    /**
+     * Configure automatic deep-link navigation on notification tap.
+     * Once configured, the SDK automatically extracts the link from tapped
+     * notifications (from `link` or `url` fields) and calls navigateTo(path).
+     * The host app only needs to pass its router navigation function.
+     *
+     * @param {Object} options - { navigateTo: Function }
+     *   navigateTo receives a relative path (e.g. "/story/123") and should
+     *   navigate the app to that route.
+     */
+    configureNavigation: function(options) {
+        if (options && typeof options.navigateTo === 'function') {
+            _navigateTo = options.navigateTo;
+        }
     },
 
     // ==================== POOSH Backend Integration ====================
