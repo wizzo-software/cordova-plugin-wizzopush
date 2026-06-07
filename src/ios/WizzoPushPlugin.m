@@ -41,7 +41,15 @@ static WizzoPushPlugin *sharedInstance = nil;
     
     // Set notification center delegate
     [UNUserNotificationCenter currentNotificationCenter].delegate = self;
-    
+
+    // Request APNS token early (silent, no permission popup) so Firebase can
+    // issue an FCM token immediately — just like Android. Without this,
+    // getToken fails until the user goes through grantPermission, and the
+    // POOSH auto-register never receives a token.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[UIApplication sharedApplication] registerForRemoteNotifications];
+    });
+
     // Check for pending notification from app launch
     [self checkLaunchNotification];
 }

@@ -92,7 +92,17 @@
     
     // Pass token to Firebase
     [FIRMessaging messaging].APNSToken = deviceToken;
-    
+
+    // Now that APNS is set, proactively fetch the FCM token and fire
+    // the token-refresh callback so POOSH gets it immediately,
+    // without relying on getToken polling.
+    [[FIRMessaging messaging] tokenWithCompletion:^(NSString *fcmToken, NSError *error) {
+        WizzoPushPlugin *p = [WizzoPushPlugin getInstance];
+        if (fcmToken && p) {
+            [p messaging:[FIRMessaging messaging] didReceiveRegistrationToken:fcmToken];
+        }
+    }];
+
     // Convert token to string for WizzoPushPlugin
     const unsigned char *tokenBytes = (const unsigned char *)[deviceToken bytes];
     NSMutableString *tokenString = [NSMutableString stringWithCapacity:deviceToken.length * 2];
