@@ -111,12 +111,49 @@ pooshApiKey: (import.meta.env.VITE_TARGET_PLATFORM &&
 
 ---
 
-## Part B — Web / desktop, server-registered
+## Part B — Web / desktop
 
-The browser has no device POOSH layer. It gets a raw FCM token via the Firebase JS SDK and a
-service worker, forwards it to your server, and the **server** registers it with POOSH.
+Two ways to wire web push. **Option 1 (POOSH JS SDK) is preferred** — it makes web
+symmetric with mobile: the browser registers directly with POOSH and hands the app a
+`token_ref`, exactly like the mobile plugin's `onPooshTokenRef`. Option 2 (your own
+Firebase SDK + server registration) is what older apps did and is still fully supported.
 
-### B1. Browser: Firebase SDK + service worker
+### B1. Option 1 — POOSH JS SDK with manual trigger (preferred)
+
+Load the SDK and drive the opt-in from your own UI (no built-in popup). The SDK loads the
+tenant's Firebase config from `/sdk/config`, registers its own service worker, and on
+`requestToken()` returns a `token_ref`.
+
+```html
+<script type="module">
+  import PooshSDK from 'https://api.poosh.work/sdk/poosh.js';
+
+  // autoPrompt:false → suppress the built-in prompt; your app decides when to ask.
+  const poosh = new PooshSDK('YOUR_POOSH_API_KEY', { autoPrompt: false });
+
+  // When YOUR UI decides the user opted in (a button, a settings toggle, etc.):
+  poosh.requestToken((info) => {
+      // info = { tokenRef: 'tk_...', token: '<raw fcm>', platform: 'web' }
+      api('media/auth/set_push_token', {
+          token_ref: info.tokenRef, platform: 'web', type: 'web'
+      });
+  });
+  // Or subscribe without triggering: poosh.onToken(cb) — fires on register + refresh.
+</script>
+```
+
+This is the **same shape as mobile** (Part A): device/browser → POOSH → `token_ref` → app
+saves it. The server just stores the ref (Part C2 mobile branch handles it). No server-side
+`registerToken()` needed, and the raw token never has to reach your backend.
+
+> The tenant API key is in the page — that's by design for this SDK (it's a device-facing
+> tenant key). `autoPrompt:false` is the only flag you need to take over the UX; everything
+> else (Firebase config, VAPID, service worker, data-only background notification) is handled
+> by the SDK.
+
+### B2. Option 2 — your own Firebase SDK + server registration
+
+If the app already has its own Firebase web setup (like RADAR did originally), keep it:
 
 - Use the Firebase JS SDK (`firebase/messaging`) with your web config + **VAPID key**.
 - Register a service worker (`public/firebase-messaging-sw.js`) that draws the notification
@@ -134,15 +171,16 @@ service worker, forwards it to your server, and the **server** registers it with
       });
   });
   ```
-- On `getToken`, forward the raw token to your server:
+- On `getToken`, forward the **raw** token to your server, which registers it with POOSH
+  (Part C2 web branch):
 
   ```javascript
   api('media/auth/set_push_token', { token, platform: 'web', type: 'web' });
   ```
 
-> **Why data-only for web?** The service worker draws the notification. If POOSH also sent a
-> `notification` block, the browser would show a DUPLICATE. (This is the opposite of native —
-> see the channelType note in Part C.)
+> **Why data-only for web (both options)?** The service worker draws the notification. If
+> POOSH also sent a `notification` block, the browser would show a DUPLICATE. (This is the
+> opposite of native — see the channelType note in Part C.)
 
 ---
 
