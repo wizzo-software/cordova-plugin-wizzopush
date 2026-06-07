@@ -57,19 +57,19 @@ var wasTapped = function(notification) {
 };
 
 // Extract a router-navigable path from a push payload.
-// Checks `link` first (relative path), then parses `url` (full URL) to extract pathname.
+// Checks original_url first (the real URL before POOSH tracking replacement),
+// then link (relative path), then url as last resort.
 var extractLink = function(payload) {
     if (!payload) return null;
-    if (payload.link && payload.link !== '') return payload.link;
-    if (payload.url && payload.url !== '') {
-        try {
-            var u = new URL(payload.url);
-            return u.pathname + u.search + u.hash;
-        } catch (_) {
-            return payload.url.replace(/^https?:\/\/[^/]+/, '') || null;
-        }
+    var rawUrl = payload.original_url || payload.link || payload.url;
+    if (!rawUrl || rawUrl === '') return null;
+    if (rawUrl.charAt(0) === '/') return rawUrl;
+    try {
+        var u = new URL(rawUrl);
+        return u.pathname + u.search + u.hash;
+    } catch (_) {
+        return rawUrl.replace(/^https?:\/\/[^/]+/, '') || null;
     }
-    return null;
 };
 
 // Navigation callback set via configureNavigation(). When set, tapped
