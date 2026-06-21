@@ -55,6 +55,7 @@
 
 // Internal callbacks (called from AppDelegate category)
 - (void)onNewToken:(NSString *)token;
+- (void)onFCMTokenRefresh:(NSString *)fcmToken;
 - (void)onNotificationReceived:(NSDictionary *)payload fromTap:(BOOL)fromTap;
 
 @end

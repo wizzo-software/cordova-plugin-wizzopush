@@ -214,6 +214,13 @@ static WizzoPushPlugin *sharedInstance = nil;
     self.currentAPNSToken = token;
 }
 
+// Public entry point for the AppDelegate category to forward a freshly-fetched
+// FCM token. Routes through the FIRMessagingDelegate handler (which is declared
+// in a private class extension and therefore not visible outside this file).
+- (void)onFCMTokenRefresh:(NSString *)fcmToken {
+    [self messaging:[FIRMessaging messaging] didReceiveRegistrationToken:fcmToken];
+}
+
 #pragma mark - UNUserNotificationCenterDelegate
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
@@ -525,7 +532,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
         
         MSALPublicClientApplicationConfig *config =
             [[MSALPublicClientApplicationConfig alloc] initWithClientId:@"b381881a-e94c-4a86-a804-1fdc249e3996"];
-        config.authority = [MSALAADAuthority aadAuthorityWithURL:
+        config.authority = [[MSALAADAuthority alloc] initWithURL:
             [NSURL URLWithString:@"https://login.microsoftonline.com/common"] error:nil];
         
         MSALPublicClientApplication *msalApp =
