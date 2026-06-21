@@ -99,7 +99,7 @@
     [[FIRMessaging messaging] tokenWithCompletion:^(NSString *fcmToken, NSError *error) {
         WizzoPushPlugin *p = [WizzoPushPlugin getInstance];
         if (fcmToken && p) {
-            [p messaging:[FIRMessaging messaging] didReceiveRegistrationToken:fcmToken];
+            [p onFCMTokenRefresh:fcmToken];
         }
     }];
 
