@@ -299,6 +299,9 @@ var WizzoPushPoosh = {
 
     /**
      * Update the token's topic subscriptions on POOSH (PUT /push/update-topics).
+     * REPLACE-ALL: overwrites the token's entire topic list. Prefer the additive
+     * subscribeTopic/unsubscribeTopic below for per-channel opt-in, so a reserved
+     * audience topic (e.g. "general") and other follows are not clobbered.
      * @param {string[]} topics the full topic list for this token
      */
     updateTopics: function (topics, token) {
@@ -306,6 +309,40 @@ var WizzoPushPoosh = {
         token = token || state.lastToken;
         if (!token || !topics) return Promise.resolve(null);
         return request('PUT', '/push/update-topics', { token: token, topics: topics });
+    },
+
+    /**
+     * Additively subscribe this device's token to ONE topic on POOSH
+     * (POST /push/subscribe). The server appends the topic if absent and leaves
+     * every other topic on the token intact (atomic JSON_ARRAY_APPEND) — so a
+     * reserved topic like "general" and any existing follows survive. This is the
+     * correct primitive for free-form per-channel opt-in ("writer-5", "category-2").
+     * @param {string} topic
+     * @param {string} [token] defaults to the last registered token
+     * @returns {Promise<boolean>} true on success, false on failure/skip
+     */
+    subscribeTopic: function (topic, token) {
+        if (!this.isEnabled() || !topic) return Promise.resolve(false);
+        token = token || state.lastToken;
+        if (!token) return Promise.resolve(false);
+        return request('POST', '/push/subscribe', { token: token, topic: topic })
+            .then(function (data) { return !!(data && data.success); });
+    },
+
+    /**
+     * Additively unsubscribe this device's token from ONE topic on POOSH
+     * (POST /push/unsubscribe). Removes just that topic, preserving the rest of
+     * the token's topic list (atomic JSON_REMOVE). The mirror of subscribeTopic.
+     * @param {string} topic
+     * @param {string} [token] defaults to the last registered token
+     * @returns {Promise<boolean>} true on success, false on failure/skip
+     */
+    unsubscribeTopic: function (topic, token) {
+        if (!this.isEnabled() || !topic) return Promise.resolve(false);
+        token = token || state.lastToken;
+        if (!token) return Promise.resolve(false);
+        return request('POST', '/push/unsubscribe', { token: token, topic: topic })
+            .then(function (data) { return !!(data && data.success); });
     },
 
     /**

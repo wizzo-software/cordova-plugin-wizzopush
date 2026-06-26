@@ -23,6 +23,8 @@ var poosh = (function() {
         registerToken: function() { return Promise.resolve(null); },
         unregisterToken: function() { return Promise.resolve(null); },
         updateTopics: function() { return Promise.resolve(null); },
+        subscribeTopic: function() { return Promise.resolve(false); },
+        unsubscribeTopic: function() { return Promise.resolve(false); },
         reportClick: function() { return Promise.resolve(null); },
         onTokenRef: function() { return function() {}; },
         offTokenRef: function() {}
@@ -243,9 +245,18 @@ var WizzoPush = {
     subscribe: function(topic, success, error) {
         exec(function() {
             // Keep POOSH's topic targeting in sync with FCM topic subscriptions.
+            // ADDITIVE: add just this topic on POOSH (POST /push/subscribe), so a
+            // reserved audience topic (e.g. "general") and other follows survive.
+            // (updateTopics is replace-all and would clobber them from the empty mirror.)
             if (topic && poosh.isEnabled()) {
                 subscribedTopics[topic] = true;
-                poosh.updateTopics(Object.keys(subscribedTopics));
+                // POOSH /push/subscribe 404s if the token isn't registered yet
+                // (e.g. user follows a channel on a fresh device before any
+                // explicit getToken). Guarantee a registered token first, then
+                // subscribe additively — so channel-follow "just works".
+                WizzoPush._ensurePooshToken(function() {
+                    poosh.subscribeTopic(topic);
+                });
             }
             if (success) success();
         }, error, "WizzoPush", "subscribe", [topic]);
@@ -259,9 +270,13 @@ var WizzoPush = {
      */
     unsubscribe: function(topic, success, error) {
         exec(function() {
+            // ADDITIVE: remove just this topic on POOSH (POST /push/unsubscribe),
+            // leaving the rest of the token's topic list intact.
             if (topic && poosh.isEnabled()) {
                 delete subscribedTopics[topic];
-                poosh.updateTopics(Object.keys(subscribedTopics));
+                WizzoPush._ensurePooshToken(function() {
+                    poosh.unsubscribeTopic(topic);
+                });
             }
             if (success) success();
         }, error, "WizzoPush", "unsubscribe", [topic]);
@@ -562,6 +577,28 @@ var WizzoPush = {
      */
     offPooshTokenRef: function(callback) {
         poosh.offTokenRef(callback);
+    },
+
+    /**
+     * Internal: ensure this device has a POOSH-registered token, then run cb.
+     * POOSH's additive /push/subscribe needs the token to already exist server-side
+     * (it 404s otherwise). If a token_ref is already cached, cb runs immediately.
+     * Otherwise we read the live FCM token via native getToken and register it with
+     * POOSH first (registerToken sets state.lastToken), then run cb. cb always runs
+     * — even if registration fails — so the caller's success path is never blocked;
+     * the subscribe call will simply no-op if no token could be obtained.
+     * @private
+     */
+    _ensurePooshToken: function(cb) {
+        if (!poosh.isEnabled()) { if (cb) cb(); return; }
+        if (poosh.getTokenRef()) { if (cb) cb(); return; }
+        exec(function(token) {
+            if (token) {
+                poosh.registerToken(token).then(function() { if (cb) cb(); }, function() { if (cb) cb(); });
+            } else {
+                if (cb) cb();
+            }
+        }, function() { if (cb) cb(); }, "WizzoPush", "getToken", []);
     },
 
     /**
