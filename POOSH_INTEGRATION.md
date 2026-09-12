@@ -97,6 +97,17 @@ WizzoPush.onPooshTokenRef(function (info) {
 > double-register the device (two `tk_` rows + duplicate pushes). Mobile is fully autonomous;
 > the server only *stores* the ref the device reports.
 
+> **Do NOT wait for the `token_ref` in your enable flow.** Turning push on in the app is
+> `hasPermission → grantPermission → configurePoosh` — each plugin call wrapped in a promise
+> with a deadline — and nothing else. The plugin registers the device by itself (retrying until
+> the FCM token exists) and reports through `onPooshTokenRef`, which fires **synchronously inside
+> the subscribe call** when a ref is already known. Listener errors are isolated, so a throwing
+> listener fails silently and the ref never reaches your server. Every "await the ref with settle
+> flags and timers" implementation written so far hung at least once (a spinner that can neither
+> resolve nor time out). Keep the listener trivial; after editing it run
+> `eslint --no-eslintrc --env browser --rule no-undef:error` — bundlers ship an undefined
+> identifier without a word.
+
 ### A2. Key gotcha — keep the API key OUT of the web bundle
 
 The tenant key must never ship in the browser. If you build web and mobile from one codebase,
@@ -269,6 +280,10 @@ const channelType = (platform === 'android' || platform === 'ios')
 | `sent:0, failed:1` to a real device | The token is stale/unregistered in FCM, or wrong Firebase project on the tenant. |
 | Device registers **twice** (two `tk_` rows) | App forwarded the raw mobile token to the server in addition to `onPooshTokenRef` — don't (A1). |
 | Web bundle leaks the API key | `pooshApiKey` not gated to mobile builds (A2). |
+| **Switch spins forever** after Allow, no ref on the app server | (a) A **vendored/stale copy** of this plugin without POOSH mode — `configurePoosh`/`onPooshTokenRef` are silent no-ops; depend on `github:wizzo-software/cordova-plugin-wizzopush`. (b) Permission requested via the Activity instead of `cordova.requestPermissions` (fixed in PR #2). (c) The app's own JS awaited the ref and threw after marking itself settled — see the A1 callout. |
+| Ref on the tenant, **never on the app server** | The `onPooshTokenRef` listener throws (e.g. calls a helper that a refactor deleted) — the plugin isolates listener errors, so nothing surfaces. Run `eslint no-undef`; read the live minified bundle: a function name surviving in full is an undefined global. |
+| A device that **just received a push** gets retired by the app server | `/messages` `results` lists only the devices POOSH addressed; inactive ones are `skipped_inactive` and absent. Retire by absence only when entries carry `token_ref`, log one line per push. |
+| Web: Allow clicked, switch stays off, `requestToken()` returns nothing | No `/poosh-sw.js` at the site root. Serve `importScripts("https://poosh.wizzo.media/sdk/poosh-sw.js")` with `Service-Worker-Allowed: /`. |
 
 ---
 
