@@ -285,10 +285,15 @@ public class WizzoPushPlugin extends CordovaPlugin {
                 callbackContext.success("true");
             } else {
                 permissionCallback = callbackContext;
-                ActivityCompat.requestPermissions(
-                    cordova.getActivity(),
-                    new String[]{Manifest.permission.POST_NOTIFICATIONS},
-                    PERMISSION_REQUEST_CODE
+                // Must go through cordova.requestPermissions, NOT ActivityCompat: Cordova
+                // routes a permission result back to a plugin only for request codes IT
+                // registered (CordovaInterfaceImpl.permissionResultCallbacks). Asking the
+                // Activity directly means onRequestPermissionResult below is never called
+                // — the dialog appears, the user taps Allow, and JS waits forever.
+                cordova.requestPermissions(
+                    this,
+                    PERMISSION_REQUEST_CODE,
+                    new String[]{Manifest.permission.POST_NOTIFICATIONS}
                 );
             }
         } else {
@@ -301,7 +306,9 @@ public class WizzoPushPlugin extends CordovaPlugin {
     @Override
     public void onRequestPermissionResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == PERMISSION_REQUEST_CODE && permissionCallback != null) {
-            boolean granted = grantResults.length > 0 && 
+            // grantResults is EMPTY when the request was cancelled (rotation, tapping
+            // outside). That is a "no", not a reason to leave the caller hanging.
+            boolean granted = grantResults.length > 0 &&
                              grantResults[0] == PackageManager.PERMISSION_GRANTED;
             permissionCallback.success(granted ? "true" : "false");
             permissionCallback = null;
