@@ -97,3 +97,62 @@ section of INSTALLATION.md for the full plugin-side API (`isPooshEnabled`, `getP
 ## License
 
 MIT © Wizzo Software
+
+## Building without analytics or MSAL
+
+The plugin compiles five SDKs into the app: firebase-messaging (the push itself),
+firebase-auth and play-services-auth (Google sign-in), firebase-analytics and MSAL
+(Microsoft sign-in). The last two are the ones an app often does not use, and they are not
+free:
+
+- **firebase-analytics** merges `com.google.android.gms.permission.AD_ID`,
+  `ACCESS_ADSERVICES_AD_ID` and `ACCESS_ADSERVICES_ATTRIBUTION` into the manifest. In Google
+  Play that means declaring an advertising id in Data safety and answering the Ads
+  questionnaire, in an app that may well show no ads at all.
+- **MSAL** brings kotlin-stdlib, coroutines, datastore, nimbus-jose-jwt, moshi, okio, gson
+  and httpcore5 with it, plus `com.yubico.yubikit`, which adds `android.permission.NFC` and
+  a `usb.host` feature to the manifest.
+
+Nothing changes by default: leave your app alone and both are compiled in exactly as before.
+An app that wants them out excludes them from its own runtime classpath, in
+`platforms/android/app/build-extras.gradle` (ship it from `config.xml` with a
+`<resource-file>` so it survives `cordova prepare`):
+
+```gradle
+configurations.configureEach { config ->
+    if (config.name.toLowerCase().contains('runtimeclasspath')) {
+        config.exclude group: 'com.google.firebase', module: 'firebase-analytics'
+        config.exclude group: 'com.microsoft.identity.client', module: 'msal'
+    }
+}
+```
+
+Runtime classpath only, on purpose: the compile classpath keeps both, so
+`WizzoPushAnalytics.java` and `WizzoPushMsal.java` still compile. They are the only files in
+the plugin that name those SDKs, and the plugin loads them defensively, so at runtime their
+absence turns into `analytics == null` (analytics actions return "not part of this build",
+everything else is untouched) and an error from `authenticateUserWithMicrosoft` instead of a
+crash. Keeping it that way is a rule, not a detail: any new reference to
+`com.google.firebase.analytics` or `com.microsoft.identity` outside those two files brings
+the crash back for every app that excluded them.
+
+Measured on Kringl (`wizzo_agent`, cordova-android 15). Same commit, same plugin, one debug
+APK built with the exclusion and one without, both from `clean`, so the delta is the two
+SDKs and nothing else (the web payload was a placeholder in both):
+
+| | with both | without both |
+|---|---|---|
+| APK | 10,138,929 B | 5,422,886 B |
+| classes in the dex | 18,939 | 10,001 |
+| `com.microsoft.identity` | 2,629 | 0 |
+| `com.yubico` | 222 | 0 |
+| `com.google.android.gms.measurement` | 416 | 0 |
+| `com.nimbusds` / `com.squareup` | 564 / 100 | 0 / 0 |
+| `com.google.firebase.analytics` | 36 | 5 |
+| **`com.google.firebase.messaging`** | **114** | **114** |
+
+4,716,043 bytes (46.5%) and 8,938 classes, with push untouched. The five analytics classes that stay
+are the `com.google.firebase.analytics.connector` interfaces, which belong to
+firebase-messaging rather than to firebase-analytics and bring no permissions with them.
+These permissions leave the merged manifest: `AD_ID`, `ACCESS_ADSERVICES_AD_ID`,
+`ACCESS_ADSERVICES_ATTRIBUTION`, `NFC` and `BIND_GET_INSTALL_REFERRER_SERVICE`.
