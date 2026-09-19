@@ -20,7 +20,6 @@ import androidx.core.content.ContextCompat;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.messaging.FirebaseMessaging;
-import com.google.firebase.analytics.FirebaseAnalytics;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -30,8 +29,6 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.OAuthProvider;
 
-import com.microsoft.identity.client.*;
-import com.microsoft.identity.client.exception.MsalException;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -51,6 +48,10 @@ import java.util.List;
 public class WizzoPushPlugin extends CordovaPlugin {
     
     private static final String TAG = "WizzoPush";
+    private static final String ANALYTICS_ABSENT =
+        "Firebase Analytics is not part of this build";
+    private static final String MSAL_ABSENT =
+        "Microsoft Sign-In is not part of this build";
     private static final String PREFS_NAME = "WizzoPushPrefs";
     private static final String KEY_INITIAL_PAYLOAD = "initialPushPayload";
     private static final int PERMISSION_REQUEST_CODE = 12345;
@@ -61,10 +62,8 @@ public class WizzoPushPlugin extends CordovaPlugin {
     private CallbackContext tokenRefreshCallback;
     private CallbackContext permissionCallback;
     private CallbackContext googleSignInCallback;
-    private CallbackContext microsoftSignInCallback;
-    private FirebaseAnalytics firebaseAnalytics;
+    private WizzoPushAnalytics analytics;
     private GoogleSignInClient googleSignInClient;
-    private IMultipleAccountPublicClientApplication msalApp;
     private boolean initialized = false;
     
     public static WizzoPushPlugin getInstance() {
@@ -80,8 +79,18 @@ public class WizzoPushPlugin extends CordovaPlugin {
         // Create default notification channel for Android 8+
         createDefaultChannel();
         
-        // Initialize Firebase Analytics
-        firebaseAnalytics = FirebaseAnalytics.getInstance(cordova.getActivity());
+        // Firebase Analytics, when this build has it. An app that excluded the artifact
+        // (to keep the advertising-id permissions out of its manifest) gets null here and
+        // everything else in the plugin carries on unchanged. The try is belt and braces:
+        // createOrNull already catches, but the class itself may fail to load at this call.
+        try {
+            analytics = WizzoPushAnalytics.createOrNull(cordova.getActivity());
+        } catch (Throwable t) {
+            analytics = null;
+        }
+        if (analytics == null) {
+            Log.d(TAG, "Firebase Analytics is not part of this build - analytics calls are no-ops");
+        }
         
         initialized = true;
     }
@@ -715,7 +724,8 @@ public class WizzoPushPlugin extends CordovaPlugin {
                 }
             }
             
-            firebaseAnalytics.logEvent(eventName, bundle);
+            if (analytics == null) { callbackContext.error(ANALYTICS_ABSENT); return; }
+            analytics.logEvent(eventName, bundle);
             Log.d(TAG, "Logged event: " + eventName);
             callbackContext.success();
         } catch (Exception e) {
@@ -725,28 +735,29 @@ public class WizzoPushPlugin extends CordovaPlugin {
     }
     
     private void setAnalyticsCollectionEnabled(boolean enabled, CallbackContext callbackContext) {
-        firebaseAnalytics.setAnalyticsCollectionEnabled(enabled);
+        if (analytics == null) { callbackContext.error(ANALYTICS_ABSENT); return; }
+        analytics.setCollectionEnabled(enabled);
         Log.d(TAG, "Analytics collection enabled: " + enabled);
         callbackContext.success();
     }
     
     private void setUserId(String userId, CallbackContext callbackContext) {
-        firebaseAnalytics.setUserId(userId);
+        if (analytics == null) { callbackContext.error(ANALYTICS_ABSENT); return; }
+        analytics.setUserId(userId);
         Log.d(TAG, "Set user ID: " + userId);
         callbackContext.success();
     }
     
     private void setUserProperty(String name, String value, CallbackContext callbackContext) {
-        firebaseAnalytics.setUserProperty(name, value);
+        if (analytics == null) { callbackContext.error(ANALYTICS_ABSENT); return; }
+        analytics.setUserProperty(name, value);
         Log.d(TAG, "Set user property: " + name + " = " + value);
         callbackContext.success();
     }
     
     private void setScreenName(String screenName, CallbackContext callbackContext) {
-        Bundle bundle = new Bundle();
-        bundle.putString(FirebaseAnalytics.Param.SCREEN_NAME, screenName);
-        bundle.putString(FirebaseAnalytics.Param.SCREEN_CLASS, screenName);
-        firebaseAnalytics.logEvent(FirebaseAnalytics.Event.SCREEN_VIEW, bundle);
+        if (analytics == null) { callbackContext.error(ANALYTICS_ABSENT); return; }
+        analytics.setScreenName(screenName);
         Log.d(TAG, "Set screen name: " + screenName);
         callbackContext.success();
     }
@@ -792,103 +803,28 @@ public class WizzoPushPlugin extends CordovaPlugin {
     
     // ==================== Microsoft Sign-In (MSAL) ====================
 
-    private void initMsalApp(Runnable onReady, CallbackContext callbackContext) {
-        if (msalApp != null) {
-            onReady.run();
-            return;
-        }
-        PublicClientApplication.createMultipleAccountPublicClientApplication(
-            cordova.getActivity().getApplicationContext(),
-            cordova.getActivity().getResources().getIdentifier(
-                "msal_auth_config", "raw", cordova.getActivity().getPackageName()),
-            new IPublicClientApplication.IMultipleAccountApplicationCreatedListener() {
-                @Override
-                public void onCreated(IMultipleAccountPublicClientApplication application) {
-                    msalApp = application;
-                    Log.d(TAG, "MSAL initialized successfully");
-                    onReady.run();
-                }
-                @Override
-                public void onError(MsalException exception) {
-                    Log.e(TAG, "MSAL initialization failed", exception);
-                    callbackContext.error("MSAL init failed: " + exception.getMessage());
-                }
-            }
-        );
-    }
-
+    // The MSAL code itself lives in WizzoPushMsal, so that nothing here names an MSAL type
+    // and an app without Microsoft sign-in can leave the SDK out of its build entirely.
+    // When it is out, the call below throws NoClassDefFoundError and the user gets a plain
+    // error instead of a crash.
     private void authenticateUserWithMicrosoft(CallbackContext callbackContext) {
-        microsoftSignInCallback = callbackContext;
+        final CallbackContext callback = callbackContext;
+        try {
+            WizzoPushMsal.signIn(cordova.getActivity(), new WizzoPushMsal.Result() {
+                @Override
+                public void onCredential(JSONObject credential) {
+                    callback.success(credential);
+                }
 
-        initMsalApp(() -> {
-            cordova.getActivity().runOnUiThread(() -> {
-                try {
-                    String[] scopes = {"User.Read", "openid", "profile", "email"};
-                    AcquireTokenParameters.Builder params = new AcquireTokenParameters.Builder()
-                        .startAuthorizationFromActivity(cordova.getActivity())
-                        .withScopes(java.util.Arrays.asList(scopes))
-                        .withPrompt(Prompt.SELECT_ACCOUNT)
-                        .withCallback(new AuthenticationCallback() {
-                            @Override
-                            public void onSuccess(IAuthenticationResult result) {
-                                try {
-                                    IAccount account = result.getAccount();
-                                    JSONObject credential = new JSONObject();
-                                    credential.put("accessToken", result.getAccessToken());
-                                    credential.put("idToken", account.getIdToken() != null ? account.getIdToken() : "");
-                                    credential.put("email", account.getUsername() != null ? account.getUsername() : "");
-                                    credential.put("displayName", "");
-                                    credential.put("uid", account.getId() != null ? account.getId() : "");
-                                    credential.put("authMethod", "msal");
-
-                                    // Extract display name from claims if available
-                                    java.util.Map<String, ?> claims = account.getClaims();
-                                    if (claims != null && claims.containsKey("name")) {
-                                        credential.put("displayName", String.valueOf(claims.get("name")));
-                                    }
-
-                                    Log.d(TAG, "Microsoft MSAL Sign-In successful: " + account.getUsername());
-                                    if (microsoftSignInCallback != null) {
-                                        microsoftSignInCallback.success(credential);
-                                        microsoftSignInCallback = null;
-                                    }
-                                } catch (JSONException e) {
-                                    Log.e(TAG, "Error creating credential JSON", e);
-                                    if (microsoftSignInCallback != null) {
-                                        microsoftSignInCallback.error("Error creating credential: " + e.getMessage());
-                                        microsoftSignInCallback = null;
-                                    }
-                                }
-                            }
-
-                            @Override
-                            public void onError(MsalException exception) {
-                                Log.e(TAG, "Microsoft MSAL Sign-In failed", exception);
-                                if (microsoftSignInCallback != null) {
-                                    microsoftSignInCallback.error("Microsoft Sign-In failed: " + exception.getMessage());
-                                    microsoftSignInCallback = null;
-                                }
-                            }
-
-                            @Override
-                            public void onCancel() {
-                                Log.d(TAG, "Microsoft MSAL Sign-In cancelled");
-                                if (microsoftSignInCallback != null) {
-                                    microsoftSignInCallback.error("Microsoft Sign-In cancelled");
-                                    microsoftSignInCallback = null;
-                                }
-                            }
-                        });
-
-                    msalApp.acquireToken(params.build());
-
-                } catch (Exception e) {
-                    Log.e(TAG, "Error starting Microsoft MSAL Sign-In", e);
-                    callbackContext.error("Error starting Microsoft Sign-In: " + e.getMessage());
-                    microsoftSignInCallback = null;
+                @Override
+                public void onError(String message) {
+                    callback.error(message);
                 }
             });
-        }, callbackContext);
+        } catch (Throwable t) {
+            Log.e(TAG, "Microsoft Sign-In is not available in this build", t);
+            callbackContext.error(MSAL_ABSENT);
+        }
     }
 
     @Override
