@@ -79,7 +79,8 @@ Two preferences in `<platform name="ios">`, both off by default. The first adds 
 `WizzoPushNSE` Notification Service Extension target to the Xcode project (bundle id
 `<app id>.nse`, signed automatically); the second lets it hand iOS a Communication
 Notification (the sender's face where the app icon sits), which needs the
-**Communication Notifications** capability on the App ID in the Apple developer portal:
+**Communication Notifications** capability on the App ID (automatic signing adds it on
+the first build; a manually signed app ticks it once in the Apple developer portal):
 
 ```xml
 <platform name="ios">
