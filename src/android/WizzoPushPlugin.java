@@ -93,6 +93,25 @@ public class WizzoPushPlugin extends CordovaPlugin {
         }
         
         initialized = true;
+        WizzoPushNotifier.setForeground(true);
+    }
+    
+    @Override
+    public void onResume(boolean multitasking) {
+        super.onResume(multitasking);
+        WizzoPushNotifier.setForeground(true);
+    }
+    
+    @Override
+    public void onPause(boolean multitasking) {
+        super.onPause(multitasking);
+        WizzoPushNotifier.setForeground(false);
+    }
+    
+    @Override
+    public void onDestroy() {
+        WizzoPushNotifier.setForeground(false);
+        super.onDestroy();
     }
     
     @Override
@@ -140,6 +159,11 @@ public class WizzoPushPlugin extends CordovaPlugin {
                 
             case "getInitialPushPayload":
                 getInitialPushPayload(callbackContext);
+                return true;
+                
+            case "clearConversation":
+                WizzoPushNotifier.cancelConversation(cordova.getActivity(), args.optString(0, null));
+                callbackContext.success();
                 return true;
                 
             case "clearAllNotifications":

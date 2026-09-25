@@ -248,6 +248,34 @@ const channelType = (platform === 'android' || platform === 'ios')
     : 'firebase_push';  // data-only → web SW draws it
 ```
 
+### C3b. Sender avatar on Android (plugin 1.1.0 + POOSH `android_data_only`)
+
+To show the sender's picture instead of the app icon on Android (see the README, "Sender
+avatar notifications"), the message must reach the phone **data-only**. POOSH's `/messages`
+takes it per message:
+
+```javascript
+await poosh.post('/messages', {
+  token_refs: refs,
+  title: 'אופרה',                 // the FCM notification title for iOS and old apps
+  body:  'ממתינה לך: ההתראות',
+  url:   'https://app.example/s/896',
+  icon_url: 'https://app.example/faces/opera.png?v=3',   // per-message picture (this call only)
+  android_data_only: true,                                // android tokens: no notification block
+  data: {
+    sender_name: 'אופרה', sender_key: 'planner',
+    conversation_id: '896', recipient_name: 'עידו',
+    session_id: '896',
+  },
+});
+```
+
+With `android_data_only: true` POOSH sends android tokens `data` only (title, body, icon and
+your `data` keys inside it) and everything else exactly as before: iOS keeps the
+`notification` block, web keeps the data-only SW message. Only send it to apps that carry
+plugin 1.1.0 or newer: an older app shows **nothing** for a data-only message in the
+background. Gate it on an app version you record at registration.
+
 ### C4. Cleanup on logout / delete-account
 
 - **Web logout / account delete:** server unregisters the raw token

@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<plugin id="cordova-plugin-wizzopush" version="1.0.0"
+<plugin id="cordova-plugin-wizzopush" version="1.1.0"
     xmlns="http://apache.org/cordova/ns/plugins/1.0"
     xmlns:android="http://schemas.android.com/apk/res/android">
     
@@ -99,6 +99,7 @@
         <source-file src="src/android/WizzoPushAnalytics.java" target-dir="src/coffee/sunday/wizzopush"/>
         <source-file src="src/android/WizzoPushMsal.java" target-dir="src/coffee/sunday/wizzopush"/>
         <source-file src="src/android/WizzoFirebaseMessagingService.java" target-dir="src/coffee/sunday/wizzopush"/>
+        <source-file src="src/android/WizzoPushNotifier.java" target-dir="src/coffee/sunday/wizzopush"/>
         <source-file src="src/android/WizzoPushMessageReceiver.java" target-dir="src/coffee/sunday/wizzopush"/>
         <source-file src="src/android/WizzoPushMessageReceiverManager.java" target-dir="src/coffee/sunday/wizzopush"/>
         

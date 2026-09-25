@@ -11,4 +11,7 @@ repositories {
 dependencies {
     // Firebase dependencies are added via plugin.xml <framework> tags
     // MSAL dependency is added via plugin.xml <framework> tag
+    // WizzoPushNotifier: Person, MessagingStyle, ShortcutManagerCompat.pushDynamicShortcut
+    // (androidx.core 1.5+). Gradle keeps the highest version when the app pins another one.
+    implementation "androidx.core:core:1.13.1"
 }
