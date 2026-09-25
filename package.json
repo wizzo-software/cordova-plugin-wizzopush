@@ -1,6 +1,6 @@
 {
   "name": "cordova-plugin-wizzopush",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Cordova plugin for push notifications - drop-in replacement for FirebaseX",
   "cordova": {
     "id": "cordova-plugin-wizzopush",
