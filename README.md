@@ -20,7 +20,7 @@ cordova plugin add github:wizzo-software/cordova-plugin-wizzopush
 
 - 🔔 **Push notifications** — get / refresh / delete the FCM token, foreground messages,
   notification taps, cold-start payloads.
-- 💬 **Sender avatar and conversations (Android, 1.1.0)** — a data-only push is drawn by the
+- 💬 **Sender avatar and conversations (Android, 1.1.0)**: a data-only push is drawn by the
   plugin like a chat message: the sender's picture in a circle, the app icon small in the
   corner, one card per conversation that stacks its messages, and on Android 11+ a real
   conversation with its shortcut. See "Sender avatar notifications" below.
