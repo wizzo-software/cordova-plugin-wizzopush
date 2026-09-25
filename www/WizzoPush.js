@@ -209,6 +209,15 @@ var WizzoPush = {
     clearAllNotifications: function(success, error) {
         exec(success, error, "WizzoPush", "clearAllNotifications", []);
     },
+
+    /**
+     * Android: dismiss the conversation card of a data-only push (the one drawn by the
+     * plugin for a `conversation_id`), for example when the user opened that conversation
+     * inside the app. No-op on iOS.
+     */
+    clearConversation: function(conversationId, success, error) {
+        exec(success, error, "WizzoPush", "clearConversation", [String(conversationId || "")]);
+    },
     
     // Alias for compatibility
     clearNotifications: function(success, error) {

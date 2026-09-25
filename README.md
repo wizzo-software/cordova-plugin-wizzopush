@@ -20,6 +20,10 @@ cordova plugin add github:wizzo-software/cordova-plugin-wizzopush
 
 - 🔔 **Push notifications** — get / refresh / delete the FCM token, foreground messages,
   notification taps, cold-start payloads.
+- 💬 **Sender avatar and conversations (Android, 1.1.0)** — a data-only push is drawn by the
+  plugin like a chat message: the sender's picture in a circle, the app icon small in the
+  corner, one card per conversation that stacks its messages, and on Android 11+ a real
+  conversation with its shortcut. See "Sender avatar notifications" below.
 - 📊 **Firebase Analytics** — `logEvent`, `setUserId`, `setUserProperty`, `setScreenName`.
 - 🔑 **Google Sign-In** (`authenticateUserWithGoogle`) and **Microsoft Sign-In via MSAL**
   (`authenticateUserWithMicrosoft`).
@@ -31,6 +35,49 @@ The FCM token always comes from **your app's own Firebase config**
 (`google-services.json` / `GoogleService-Info.plist`) baked in at build time.
 
 ---
+
+## Sender avatar notifications (Android)
+
+An FCM `notification` message is drawn by the Firebase SDK while the app is in the background,
+and the SDK never shows the sender's picture, only the app icon. Since 1.1.0 a **data-only**
+message that arrives while the app is not on screen is drawn by the plugin itself
+(`WizzoPushNotifier.java`), the way WhatsApp draws a chat message. When the app IS on screen
+nothing is drawn: the JS `onMessageReceived` callback gets the message (with
+`shownNatively: true` when the plugin drew it as well) and the app shows its own in-app UI.
+
+Send a data-only message (no `notification` block; `android.priority: "high"`) whose `data`
+carries these string keys:
+
+| key | what it does |
+|---|---|
+| `title`, `body` | the text. At least one is required, otherwise nothing is shown |
+| `icon` | https URL of the sender's picture (PNG/JPEG, square, 256px is plenty). Circled, shown big; cached on the phone for 7 days per URL, so change the URL (`?v=`) when the picture changes |
+| `sender_name` | who sent it, bold. Turns the card into a conversation (MessagingStyle): name + text, avatar as the Person |
+| `sender_key` | a stable key of the sender (defaults to `sender_name`) |
+| `conversation_id` | the thread. Messages with the same id append to one card (the last 25) and share one long-lived shortcut, which is what Android 11+ needs to place it in the Conversations section and show the avatar as the bubble |
+| `recipient_name` | the reader's own name (the "me" of the thread); defaults to the app name |
+| `image` | https URL of a big picture (BigPictureStyle), used when the push is not a conversation |
+| `channel_id` | notification channel (default `default`, created if missing) |
+| `notification_id` | explicit integer id; default: hash of `conversation_id`, else of the message id |
+| `url`, anything else | untouched, passed as intent extras: the tap payload in JS is the whole data map |
+
+The small icon is the app's `fcm_push_icon` drawable when it has one, then Firebase's
+`default_notification_icon` meta-data, then the launcher icon; the accent colour comes from
+`default_notification_color`. Custom `WizzoPushMessageReceiver`s still run first: a message
+they handle never reaches the notifier. A data-only message without `title`/`body` (a silent
+sync) is forwarded to JS and shows nothing, as before.
+
+Tapping the card opens the app with the data as extras (`onMessageReceived` with
+`tap: "background"`, or `getInitialPushPayload()` on a cold start). When the user opens the
+conversation inside the app, dismiss its card:
+
+```javascript
+WizzoPush.clearConversation(conversationId);
+```
+
+iOS is unchanged: only Communication Notifications (a Notification Service Extension with an
+`INSendMessageIntent`) can replace the app icon there, and that lives in the app, not in
+this plugin. Keep sending iOS a normal `notification` message.
 
 ## Optional: POOSH backend integration
 
