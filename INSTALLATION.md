@@ -73,6 +73,25 @@ Add `GoogleService-Info.plist` as a **resource-file** inside `<platform name="io
 
 > **Why?** This tells Cordova to register the file in the Xcode project (`.pbxproj`), not just copy it. Without this, Firebase can't find the file at runtime and the app will crash on launch.
 
+#### Sender avatar notifications (iOS only — optional, 1.2.0)
+
+Two preferences in `<platform name="ios">`, both off by default. The first adds the
+`WizzoPushNSE` Notification Service Extension target to the Xcode project (bundle id
+`<app id>.nse`, signed automatically); the second lets it hand iOS a Communication
+Notification (the sender's face where the app icon sits), which needs the
+**Communication Notifications** capability on the App ID in the Apple developer portal:
+
+```xml
+<platform name="ios">
+    <preference name="WizzoPushNotificationServiceExtension" value="true" />
+    <preference name="WizzoPushCommunicationNotifications" value="true" />
+</platform>
+```
+
+Nothing else to do: `cordova prepare ios` runs the plugin's hook, which copies the
+extension sources into `platforms/ios/WizzoPushNSE/`, adds the target and embeds it in the
+app. Details and the payload keys: README, "Sender avatar notifications (iOS)".
+
 #### Google Sign-In (iOS only — optional)
 
 If you use Google Sign-In, add the **reversed client ID** as a URL scheme. You can find it inside `GoogleService-Info.plist` under `REVERSED_CLIENT_ID`:

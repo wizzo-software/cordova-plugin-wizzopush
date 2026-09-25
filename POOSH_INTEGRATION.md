@@ -276,6 +276,16 @@ your `data` keys inside it) and everything else exactly as before: iOS keeps the
 plugin 1.1.0 or newer: an older app shows **nothing** for a data-only message in the
 background. Gate it on an app version you record at registration.
 
+### C3c. Sender avatar on iOS (plugin 1.2.0, the Notification Service Extension)
+
+The same `/messages` call serves iOS; no flag is needed. POOSH already sends every app push
+with `mutable-content: 1`, and `icon_url` and the `data` keys reach the phone as custom keys
+of the APNs payload, which is what the plugin's service extension reads: `icon` (from
+`icon_url`), `sender_name`, `sender_key`, `conversation_id`, `image`. Since POOSH sets the
+APNs `thread-id` to `conversation_id`, a thread stacks its messages. The app opts in with the
+two `config.xml` preferences (INSTALLATION.md, "Sender avatar notifications (iOS)"); an app
+built without them shows the plain notification, title and body, as before.
+
 ### C4. Cleanup on logout / delete-account
 
 - **Web logout / account delete:** server unregisters the raw token

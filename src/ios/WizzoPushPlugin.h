@@ -21,6 +21,7 @@
 
 // Notification Management
 - (void)clearAllNotifications:(CDVInvokedUrlCommand*)command;
+- (void)clearConversation:(CDVInvokedUrlCommand*)command;
 - (void)setBadgeNumber:(CDVInvokedUrlCommand*)command;
 - (void)getBadgeNumber:(CDVInvokedUrlCommand*)command;
 

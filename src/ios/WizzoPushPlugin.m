@@ -267,6 +267,31 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
 }
 
+/**
+ * Dismiss the delivered notifications of ONE conversation (1.2.0). The service extension
+ * files every message under its conversation_id as the threadIdentifier, so the cards of
+ * a thread the user just opened inside the app can go without touching the others.
+ * An unknown or empty id removes nothing and still answers OK.
+ */
+- (void)clearConversation:(CDVInvokedUrlCommand*)command {
+    NSString *conversationId = [command.arguments count] ? [command argumentAtIndex:0] : @"";
+    if (![conversationId isKindOfClass:[NSString class]]) conversationId = @"";
+    UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+    [center getDeliveredNotificationsWithCompletionHandler:^(NSArray<UNNotification *> *notifications) {
+        NSMutableArray<NSString *> *ids = [NSMutableArray array];
+        if (conversationId.length) {
+            for (UNNotification *n in notifications) {
+                if ([n.request.content.threadIdentifier isEqualToString:conversationId]) {
+                    [ids addObject:n.request.identifier];
+                }
+            }
+        }
+        if (ids.count) [center removeDeliveredNotificationsWithIdentifiers:ids];
+        CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+    }];
+}
+
 - (void)setBadgeNumber:(CDVInvokedUrlCommand*)command {
     NSInteger number = [[command argumentAtIndex:0] integerValue];
     

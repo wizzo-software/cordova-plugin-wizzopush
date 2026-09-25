@@ -20,10 +20,11 @@ cordova plugin add github:wizzo-software/cordova-plugin-wizzopush
 
 - 🔔 **Push notifications** — get / refresh / delete the FCM token, foreground messages,
   notification taps, cold-start payloads.
-- 💬 **Sender avatar and conversations (Android, 1.1.0)**: a data-only push is drawn by the
-  plugin like a chat message: the sender's picture in a circle, the app icon small in the
-  corner, one card per conversation that stacks its messages, and on Android 11+ a real
-  conversation with its shortcut. See "Sender avatar notifications" below.
+- 💬 **Sender avatar and conversations (Android 1.1.0, iOS 1.2.0)**: a push that names its
+  sender is drawn like a chat message: the sender's picture in a circle, the app icon small
+  in the corner, one thread per conversation. Android draws it in the plugin from a
+  data-only message; iOS draws it in an optional Notification Service Extension the plugin
+  adds to the Xcode project. See "Sender avatar notifications" below.
 - 📊 **Firebase Analytics** — `logEvent`, `setUserId`, `setUserProperty`, `setScreenName`.
 - 🔑 **Google Sign-In** (`authenticateUserWithGoogle`) and **Microsoft Sign-In via MSAL**
   (`authenticateUserWithMicrosoft`).
@@ -75,9 +76,50 @@ conversation inside the app, dismiss its card:
 WizzoPush.clearConversation(conversationId);
 ```
 
-iOS is unchanged: only Communication Notifications (a Notification Service Extension with an
-`INSendMessageIntent`) can replace the app icon there, and that lives in the app, not in
-this plugin. Keep sending iOS a normal `notification` message.
+## Sender avatar notifications (iOS)
+
+iOS draws every remote notification itself and shows only the app icon, unless the app ships
+a **Notification Service Extension** (a second build target that gets the payload before it
+is shown, and has 30 seconds to change it). Since 1.2.0 the plugin carries one
+(`src/ios/nse/NotificationService.swift`) and a hook that adds it to the Xcode project after
+every `cordova prepare`. It is OFF by default: nothing changes for an app that does not opt in.
+
+Opt in from the app's `config.xml`:
+
+```xml
+<platform name="ios">
+    <!-- adds the WizzoPushNSE target (bundle id <app id>.nse) -->
+    <preference name="WizzoPushNotificationServiceExtension" value="true" />
+    <!-- the WhatsApp shape: her face where the app icon sits (Communication Notifications) -->
+    <preference name="WizzoPushCommunicationNotifications" value="true" />
+</platform>
+```
+
+Keep sending iOS a normal `notification` message (title + body), with `mutable-content: 1`
+in the `aps` block (POOSH sets it on every app push) and the same custom keys as Android
+next to it: `icon`, `sender_name`, `sender_key`, `conversation_id`, `image`. The extension:
+
+- files the notification under `conversation_id` (`threadIdentifier`), so a thread stacks
+  its messages and `WizzoPush.clearConversation(id)` dismisses exactly that thread;
+- with `WizzoPushCommunicationNotifications` and iOS 15+: downloads `icon`, builds an
+  `INSendMessageIntent` whose sender carries the picture, and hands iOS a communication
+  notification: the sender's face large, the app icon as the small badge, the name in bold;
+- otherwise (or when the intent is refused): attaches `icon` as the notification's
+  thumbnail on the trailing side, and `image` as a big attachment when there is one.
+
+What the second preference needs from Apple, once per app: the **Communication
+Notifications** capability on the App ID in the developer portal
+(Certificates, Identifiers & Profiles, the App ID, "Communication Notifications"). The
+capability is not offered by the App Store Connect API, so it is a click in the portal; a
+build without it fails at CodeSign with "...doesn't support the Communication Notifications
+capability". The extension itself needs no capability: automatic signing registers
+`<app id>.nse` on the first build (`-allowProvisioningUpdates`, which cordova passes when
+`build.json` has `automaticProvisioning: true`).
+
+The extension is Swift; a plain Objective-C Cordova app builds it fine (`SWIFT_VERSION` is
+set on the target, the Swift runtime is embedded by the app). It shares the app's
+deployment target (`deployment-target` preference, default 13.0), and does not read the
+app's `GoogleService-Info.plist` or any pod: it only downloads two pictures.
 
 ## Optional: POOSH backend integration
 
