@@ -108,13 +108,15 @@ next to it: `icon`, `sender_name`, `sender_key`, `conversation_id`, `image`. The
   thumbnail on the trailing side, and `image` as a big attachment when there is one.
 
 What the second preference needs from Apple, once per app: the **Communication
-Notifications** capability on the App ID in the developer portal
-(Certificates, Identifiers & Profiles, the App ID, "Communication Notifications"). The
-capability is not offered by the App Store Connect API, so it is a click in the portal; a
-build without it fails at CodeSign with "...doesn't support the Communication Notifications
-capability". The extension itself needs no capability: automatic signing registers
-`<app id>.nse` on the first build (`-allowProvisioningUpdates`, which cordova passes when
-`build.json` has `automaticProvisioning: true`).
+Notifications** capability on the App ID. The App Store Connect API does not offer it,
+but a build signed automatically adds it by itself: Xcode's `-allowProvisioningUpdates`
+(cordova passes it when `build.json` has `automaticProvisioning: true`) registers the
+capability on the App ID during the first build that carries the entitlement (verified on
+ai.kringl.app, 26.09.2026). Only a manually signed build needs the checkbox in the portal
+(Certificates, Identifiers & Profiles, the App ID, "Communication Notifications"); without
+it CodeSign fails with "...doesn't support the Communication Notifications capability".
+The extension itself needs no capability: automatic signing registers `<app id>.nse` on
+the same build.
 
 The extension is Swift; a plain Objective-C Cordova app builds it fine (`SWIFT_VERSION` is
 set on the target, the Swift runtime is embedded by the app). It shares the app's
