@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<plugin id="cordova-plugin-wizzopush" version="1.2.0"
+<plugin id="cordova-plugin-wizzopush" version="1.2.1"
     xmlns="http://apache.org/cordova/ns/plugins/1.0"
     xmlns:android="http://schemas.android.com/apk/res/android">
     
@@ -78,7 +78,10 @@
                 android:name="com.google.firebase.messaging.default_notification_channel_id" 
                 android:value="default"/>
             
-            <!-- MSAL BrowserTabActivity for Microsoft auth redirect -->
+            <!-- MSAL BrowserTabActivity for the Microsoft auth redirect:
+                 msauth://<applicationId>/<signature hash>. The host is the app's own package
+                 name; the hash is the app's signing key (plugin variable MSAL_SIGNATURE_HASH,
+                 see INSTALLATION.md). Apps without Microsoft sign-in keep the placeholder. -->
             <activity
                 android:name="com.microsoft.identity.client.BrowserTabActivity"
                 android:exported="true">
@@ -88,8 +91,8 @@
                     <category android:name="android.intent.category.BROWSABLE" />
                     <data
                         android:scheme="msauth"
-                        android:host="coffee.sunday.app"
-                        android:path="/dJzDrOC7JjapPCL0s+LcPoBrs+4=" />
+                        android:host="$PACKAGE_NAME"
+                        android:path="/$MSAL_SIGNATURE_HASH" />
                 </intent-filter>
             </activity>
         </config-file>
@@ -106,7 +109,8 @@
         <source-file src="src/android/WizzoPushMessageReceiver.java" target-dir="src/coffee/sunday/wizzopush"/>
         <source-file src="src/android/WizzoPushMessageReceiverManager.java" target-dir="src/coffee/sunday/wizzopush"/>
         
-        <!-- MSAL config -->
+        <!-- MSAL config: a PLACEHOLDER so the raw resource always exists. The app's own
+             msal_auth_config.json (project root) is copied over it by hooks/copy_google_services.js. -->
         <resource-file src="src/android/res/raw/msal_auth_config.json" target="res/raw/msal_auth_config.json" />
         
         <!-- FirebaseX compatibility classes (allows VoIP plugin to work without changes) -->
@@ -122,6 +126,10 @@
         <preference name="FIREBASE_AUTH_VERSION" default="23.0.0" />
         <preference name="GOOGLE_AUTH_VERSION" default="21.0.0" />
         <preference name="MSAL_VERSION" default="8.+" />
+        <!-- Microsoft sign-in redirect: the base64 SHA-1 of the app's signing key, as registered
+             in Azure (msauth://<applicationId>/<hash>). Only apps that call
+             authenticateUserWithMicrosoft set it; the placeholder matches nothing. -->
+        <preference name="MSAL_SIGNATURE_HASH" default="PLACEHOLDER" />
         
         <framework src="com.google.firebase:firebase-messaging:$FIREBASE_MESSAGING_VERSION" />
         <framework src="com.google.firebase:firebase-analytics:$FIREBASE_ANALYTICS_VERSION" />
@@ -181,13 +189,13 @@
         
         <!-- Google Sign-In URL Scheme is configured in app's config.xml -->
 
-        <!-- MSAL (Microsoft Sign-In): redirect URL scheme = msauth.<bundle_id> -->
+        <!-- MSAL (Microsoft Sign-In): redirect URL scheme = msauth.<bundle_id>, the app's own -->
         <config-file target="*-Info.plist" parent="CFBundleURLTypes">
             <array>
                 <dict>
                     <key>CFBundleURLSchemes</key>
                     <array>
-                        <string>msauth.sunday.com</string>
+                        <string>msauth.$PACKAGE_NAME</string>
                     </array>
                 </dict>
             </array>

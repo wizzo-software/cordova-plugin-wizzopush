@@ -6,11 +6,13 @@
  * Copies:
  *   - GoogleService-Info.plist → iOS project (as resource-file in Xcode)
  *   - google-services.json → Android app directory
+ *   - msal_auth_config.json → Android res/raw (Microsoft sign-in, optional)
  * 
  * Place these files in your Cordova project root:
  *   myapp/
  *     GoogleService-Info.plist   ← from Firebase Console (iOS)
  *     google-services.json      ← from Firebase Console (Android)
+ *     msal_auth_config.json     ← from Azure (Android, only if you use authenticateUserWithMicrosoft)
  *     config.xml
  *     ...
  */
@@ -30,8 +32,30 @@ module.exports = function(context) {
     // Android: Copy google-services.json
     if (platforms.indexOf('android') !== -1) {
         copyGoogleServicesAndroid(projectRoot);
+        copyMsalConfigAndroid(projectRoot);
     }
 };
+
+// Microsoft sign-in (MSAL) reads its config from res/raw/msal_auth_config.json. The plugin
+// ships a placeholder there (client_id of zeros) so the resource always exists; an app that
+// uses authenticateUserWithMicrosoft puts ITS OWN msal_auth_config.json in the project root
+// (client_id + the msauth redirect of its package name and signing key) and this copies it
+// over the placeholder on every prepare. No file: the placeholder stays, push and everything
+// else work, and only a Microsoft sign-in fails with an MSAL error.
+function copyMsalConfigAndroid(projectRoot) {
+    var srcFile = path.join(projectRoot, 'msal_auth_config.json');
+    if (!fs.existsSync(srcFile)) return;
+
+    var destDir = path.join(projectRoot, 'platforms', 'android', 'app', 'src', 'main', 'res', 'raw');
+    if (!fs.existsSync(path.join(projectRoot, 'platforms', 'android'))) return;
+    if (!fs.existsSync(destDir)) {
+        fs.mkdirSync(destDir, { recursive: true });
+    }
+
+    var destFile = path.join(destDir, 'msal_auth_config.json');
+    fs.copyFileSync(srcFile, destFile);
+    console.log('[WizzoPush] Copied msal_auth_config.json → ' + destFile);
+}
 
 function copyGoogleServiceiOS(projectRoot) {
     var srcFile = path.join(projectRoot, 'GoogleService-Info.plist');

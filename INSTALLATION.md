@@ -39,6 +39,7 @@ myapp/
 ├── config.xml
 ├── GoogleService-Info.plist   ← iOS (from Firebase Console)
 ├── google-services.json       ← Android (from Firebase Console)
+├── msal_auth_config.json      ← Android, optional: only if you use Microsoft Sign-In (from Azure)
 ├── www/
 └── ...
 ```
@@ -58,6 +59,36 @@ myapp/
 - ✅ Default notification channel
 
 Just make sure `google-services.json` is in the project root.
+
+**Microsoft Sign-In (optional).** `authenticateUserWithMicrosoft` reads `res/raw/msal_auth_config.json`.
+The plugin ships a placeholder there; to use it, put your own `msal_auth_config.json` in the project
+root and the plugin copies it in on every `cordova prepare`:
+
+```json
+{
+  "client_id": "<your Azure app (client) id>",
+  "authorization_user_agent": "DEFAULT",
+  "redirect_uri": "msauth://<your applicationId>/<URL-encoded signature hash>",
+  "account_mode": "MULTIPLE",
+  "authorities": [
+    { "type": "AAD", "audience": { "type": "AzureADandPersonalMicrosoftAccount" } }
+  ]
+}
+```
+
+The redirect is the one you register in Azure for your package name and signing key
+(`keytool -exportcert ... | openssl sha1 -binary | openssl base64`, then URL-encode). The same
+hash, NOT URL-encoded, goes into the plugin variable `MSAL_SIGNATURE_HASH`, which becomes the
+Android intent filter that catches the redirect (`msauth://<applicationId>/<hash>`):
+
+```bash
+cordova plugin add cordova-plugin-wizzopush --variable MSAL_SIGNATURE_HASH="dJzDr...s+4="
+```
+
+or in `package.json` under `cordova.plugins."cordova-plugin-wizzopush".MSAL_SIGNATURE_HASH`. On
+iOS the scheme is `msauth.<bundle id>` and the plugin derives it from your bundle id by itself.
+Without the file and the variable, push and everything else work; only a Microsoft sign-in
+fails with an MSAL error.
 
 ### iOS
 
