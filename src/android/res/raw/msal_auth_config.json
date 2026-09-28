@@ -1,7 +1,8 @@
 {
-  "client_id": "b381881a-e94c-4a86-a804-1fdc249e3996",
+  "_comment": "Placeholder. Your app's own Microsoft (MSAL) config goes in msal_auth_config.json at the Cordova project root, next to google-services.json; the plugin copies it over this file on every prepare. Register the redirect for YOUR package name and signing key in Azure: msauth://<applicationId>/<url-encoded signature hash>.",
+  "client_id": "00000000-0000-0000-0000-000000000000",
   "authorization_user_agent": "DEFAULT",
-  "redirect_uri": "msauth://coffee.sunday.app/dJzDrOC7JjapPCL0s%2BLcPoBrs%2B4%3D",
+  "redirect_uri": "msauth://app.example/PLACEHOLDER",
   "account_mode": "MULTIPLE",
   "authorities": [
     {

@@ -33,7 +33,10 @@ cordova plugin add github:wizzo-software/cordova-plugin-wizzopush
   `FirebasePluginMessageReceiver` (e.g. VoIP) work without changes.
 
 The FCM token always comes from **your app's own Firebase config**
-(`google-services.json` / `GoogleService-Info.plist`) baked in at build time.
+(`google-services.json` / `GoogleService-Info.plist`) baked in at build time. Microsoft sign-in
+works the same way: your own `msal_auth_config.json` in the project root plus the
+`MSAL_SIGNATURE_HASH` plugin variable (see INSTALLATION.md, Step 2); the plugin itself ships only
+placeholders and knows no app's identifiers.
 
 ---
 
