@@ -60,6 +60,7 @@ carries these string keys:
 | `sender_key` | a stable key of the sender (defaults to `sender_name`) |
 | `conversation_id` | the thread. Messages with the same id append to one card (the last 25) and share one long-lived shortcut, which is what Android 11+ needs to place it in the Conversations section and show the avatar as the bubble |
 | `recipient_name` | the reader's own name (the "me" of the thread); defaults to the app name |
+| `bubble` | `1` asks for a bubble (Android 11+): the conversation floats over other apps as the sender's face, a tap opens it in a small window. Honoured only with `sender_name` + `conversation_id`, and only when the app declares the window that hosts it as application meta-data `coffee.sunday.wizzopush.bubble_activity` (the activity's full class name; it must be `resizeableActivity="true"` and `allowEmbedded="true"`, and gets the whole data map as intent extras). The person's bubble setting still decides; without it the push is a normal card |
 | `image` | https URL of a big picture (BigPictureStyle), used when the push is not a conversation |
 | `channel_id` | notification channel (default `default`, created if missing) |
 | `notification_id` | explicit integer id; default: hash of `conversation_id`, else of the message id |
