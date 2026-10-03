@@ -62,6 +62,17 @@ import java.util.Map;
  *                    shortcut. Without it every push is its own card
  *   recipient_name   the reader's own name (the "me" of the thread); defaults to the app name
  *   channel_id       the notification channel to post on; defaults to "default"
+ *   bubble           "1" asks for a bubble (Android 11+): the conversation floats over other
+ *                    apps as the sender's face, and a tap opens it in a small window. Only
+ *                    honoured for a conversation push (sender_name + conversation_id), and only
+ *                    when the app declares the window that hosts it, as application meta-data:
+ *                    <meta-data android:name="coffee.sunday.wizzopush.bubble_activity"
+ *                               android:value="<the activity's full class name>" />
+ *                    That activity gets the whole data map as intent extras, and must be
+ *                    resizeableActivity="true" and allowEmbedded="true" (Android's rule for a
+ *                    bubble). An app without it never bubbles, whatever the push says. Whether
+ *                    a bubble actually appears is still the person's choice in the system
+ *                    settings; without their yes the push stays a normal card.
  *   notification_id  an explicit integer id; defaults to a hash of conversation_id or messageId
  *   url, and anything else   passed through untouched as intent extras, so the JS tap
  *                    payload carries the whole data map
@@ -75,6 +86,8 @@ public final class WizzoPushNotifier {
     private static final int ICON_PX = 256;
     private static final long ICON_CACHE_TTL_MS = 7L * 24 * 60 * 60 * 1000;
     private static final int NET_TIMEOUT_MS = 6000;
+    private static final String BUBBLE_ACTIVITY_META = "coffee.sunday.wizzopush.bubble_activity";
+    private static final int BUBBLE_HEIGHT_DP = 640;
 
     /** True while the Cordova activity is on screen (set by WizzoPushPlugin onResume/onPause). */
     private static volatile boolean foreground = false;
@@ -175,7 +188,11 @@ public final class WizzoPushNotifier {
             builder.addPerson(senderPerson);
             if (!isEmpty(conversationId)) {
                 String shortcutId = publishShortcut(ctx, conversationId, senderPerson, avatar, data);
-                if (shortcutId != null) builder.setShortcutId(shortcutId);
+                if (shortcutId != null) {
+                    builder.setShortcutId(shortcutId);
+                    NotificationCompat.BubbleMetadata bubble = bubbleFor(ctx, data, avatar, notificationId);
+                    if (bubble != null) builder.setBubbleMetadata(bubble);
+                }
             }
         } else if (!isEmpty(imageUrl)) {
             Bitmap big = loadBitmap(ctx, imageUrl, 1024);
@@ -324,6 +341,66 @@ public final class WizzoPushNotifier {
             Log.w(TAG, "Shortcut not published", t);
             return null;
         }
+    }
+
+    // ---------------------------------------------------------------- bubble
+
+    /**
+     * The bubble of a conversation push, or null when it should stay a card: the push did not
+     * ask, the phone is older than Android 11 (bubbles before that were a developer option),
+     * or the app has no window to host one. Never throws: a bubble that cannot be built leaves
+     * the card exactly as it was.
+     */
+    private static NotificationCompat.BubbleMetadata bubbleFor(Context ctx, Map<String, String> data,
+                                                               Bitmap avatar, int requestCode) {
+        String asked = data.get("bubble");
+        if (!"1".equals(asked) && !"true".equalsIgnoreCase(asked)) return null;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null;
+        Bundle meta = metaData(ctx);
+        String activity = meta != null ? meta.getString(BUBBLE_ACTIVITY_META) : null;
+        if (isEmpty(activity)) return null;
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setClassName(ctx, activity.trim());
+            // One window per conversation: the address keeps two bubbles' intents apart.
+            intent.setData(Uri.parse("wizzopush-bubble://conversation/" + Uri.encode(data.get("conversation_id"))));
+            for (Map.Entry<String, String> entry : data.entrySet()) {
+                intent.putExtra(entry.getKey(), entry.getValue());
+            }
+            // MUTABLE is Android's own requirement: the system adds the bubble's window
+            // details to this intent when it launches it.
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) flags |= PendingIntent.FLAG_MUTABLE;
+            PendingIntent pending = PendingIntent.getActivity(ctx, requestCode, intent, flags);
+            // The shortcut's face is what Android draws on the bubble; this icon is only its
+            // fallback, and a bubble refuses a plain bitmap, so it is an adaptive one.
+            IconCompat icon = avatar != null
+                ? IconCompat.createWithAdaptiveBitmap(adaptive(avatar))
+                : IconCompat.createWithResource(ctx, ctx.getApplicationInfo().icon);
+            return new NotificationCompat.BubbleMetadata.Builder(pending, icon)
+                .setDesiredHeight(BUBBLE_HEIGHT_DP)
+                .setAutoExpandBubble(false)
+                .setSuppressNotification(false)
+                .build();
+        } catch (Throwable t) {
+            Log.w(TAG, "Bubble not built", t);
+            return null;
+        }
+    }
+
+    /**
+     * An adaptive icon is drawn with its outer sixth on every side cut away by the launcher
+     * mask, so the circled face goes in the middle two thirds of a larger white square.
+     */
+    private static Bitmap adaptive(Bitmap circle) {
+        int size = circle.getWidth();
+        int canvasSize = size * 3 / 2;
+        Bitmap out = Bitmap.createBitmap(canvasSize, canvasSize, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(out);
+        canvas.drawColor(0xFFFFFFFF);
+        float offset = (canvasSize - size) / 2f;
+        canvas.drawBitmap(circle, offset, offset, new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG));
+        return out;
     }
 
     // ---------------------------------------------------------------- pictures

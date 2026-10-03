@@ -2,6 +2,7 @@ package coffee.sunday.wizzopush;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
@@ -11,6 +12,7 @@ import android.net.Uri;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.service.notification.StatusBarNotification;
 import android.util.Log;
 
 import androidx.core.app.ActivityCompat;
@@ -485,7 +487,17 @@ public class WizzoPushPlugin extends CordovaPlugin {
     private void clearAllNotifications(CallbackContext callbackContext) {
         NotificationManager nm = (NotificationManager) cordova.getActivity()
             .getSystemService(Context.NOTIFICATION_SERVICE);
-        nm.cancelAll();
+        // A conversation floating as a bubble is not a card waiting to be read: the person
+        // put it on the screen and it goes when they drag it away. Cancelling its
+        // notification would pop the bubble as well, so opening the app leaves it there.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            for (StatusBarNotification sbn : nm.getActiveNotifications()) {
+                if ((sbn.getNotification().flags & Notification.FLAG_BUBBLE) != 0) continue;
+                nm.cancel(sbn.getTag(), sbn.getId());
+            }
+        } else {
+            nm.cancelAll();
+        }
         callbackContext.success();
     }
     
