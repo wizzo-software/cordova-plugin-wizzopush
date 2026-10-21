@@ -251,3 +251,32 @@ are the `com.google.firebase.analytics.connector` interfaces, which belong to
 firebase-messaging rather than to firebase-analytics and bring no permissions with them.
 These permissions leave the merged manifest: `AD_ID`, `ACCESS_ADSERVICES_AD_ID`,
 `ACCESS_ADSERVICES_ATTRIBUTION`, `NFC` and `BIND_GET_INSTALL_REFERRER_SERVICE`.
+
+## Reply and mark-as-read on a conversation card (1.3.0)
+
+A conversation push (`sender_name` + `conversation_id`) gets a **reply** action with an inline
+text field, and an invisible **mark as read** action, when the app names the Android `Service`
+that carries them out:
+
+```xml
+<meta-data android:name="coffee.sunday.wizzopush.conversation_service"
+           android:value="com.example.app.ConversationActionService" />
+<service android:name="com.example.app.ConversationActionService" android:exported="false" />
+```
+
+Both actions carry the semantic flags (`SEMANTIC_ACTION_REPLY`, `SEMANTIC_ACTION_MARK_AS_READ`,
+`setShowsUserInterface(false)`) that Android Auto, Wear OS and the assistant look for, so an app
+that also declares the automotive descriptor (`com.google.android.gms.car.application` with
+`<uses name="notification"/>`) has its conversations read aloud on the car screen and answered
+by voice with no further code.
+
+The service is started with the whole data map of the push as extras, plus
+`WizzoPushNotifier.EXTRA_ACTION` (`"reply"` / `"read"`) and `EXTRA_NOTIFICATION_ID`. A reply's
+text: `RemoteInput.getResultsFromIntent(intent).getCharSequence(WizzoPushNotifier.REMOTE_INPUT_KEY)`.
+Do the network work off the main thread. When the reply was delivered call
+`WizzoPushNotifier.appendOwnMessage(ctx, id, text)` so the card shows it as sent (a `null` text
+re-posts the card unchanged, which stops the inline field's spinner after a failure); for mark
+as read call `WizzoPushNotifier.dismiss(ctx, id)`.
+
+Labels: the app's string resources `wizzopush_action_reply` and `wizzopush_action_mark_read`
+(any language) when present, else "Reply" / "Mark as read".
