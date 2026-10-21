@@ -24,6 +24,7 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.Person;
+import androidx.core.app.RemoteInput;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.pm.ShortcutInfoCompat;
 import androidx.core.content.pm.ShortcutManagerCompat;
@@ -74,6 +75,21 @@ import java.util.Map;
  *                    a bubble actually appears is still the person's choice in the system
  *                    settings; without their yes the push stays a normal card.
  *   notification_id  an explicit integer id; defaults to a hash of conversation_id or messageId
+ *
+ * Reply and mark-as-read (chat #6236): a conversation push gets a "reply" action with an
+ * inline text field (and, invisibly, "mark as read") when the app names the Service that
+ * carries them out, as application meta-data:
+ *   <meta-data android:name="coffee.sunday.wizzopush.conversation_service"
+ *              android:value="<the service's full class name>" />
+ * The two actions carry the semantic flags Android Auto, Wear and the assistant look for,
+ * so with the automotive descriptor in the app's manifest the same card is read aloud on
+ * the car screen and answered by voice. The service is started with the whole data map as
+ * extras plus EXTRA_ACTION ("reply" / "read") and EXTRA_NOTIFICATION_ID; a reply's text is
+ * in RemoteInput.getResultsFromIntent(intent).getCharSequence(REMOTE_INPUT_KEY). After a
+ * reply was delivered the service calls {@link #appendOwnMessage} so the card (and the car)
+ * show it as sent; mark-as-read calls {@link #dismiss}. The button's label comes from the
+ * app's string resources wizzopush_action_reply / wizzopush_action_mark_read when it has
+ * them (any language), else "Reply" / "Mark as read".
  *   url, and anything else   passed through untouched as intent extras, so the JS tap
  *                    payload carries the whole data map
  */
@@ -87,6 +103,16 @@ public final class WizzoPushNotifier {
     private static final long ICON_CACHE_TTL_MS = 7L * 24 * 60 * 60 * 1000;
     private static final int NET_TIMEOUT_MS = 6000;
     private static final String BUBBLE_ACTIVITY_META = "coffee.sunday.wizzopush.bubble_activity";
+    private static final String CONVERSATION_SERVICE_META = "coffee.sunday.wizzopush.conversation_service";
+
+    /** Intent extra on the conversation service: which action was taken, ACTION_REPLY or ACTION_READ. */
+    public static final String EXTRA_ACTION = "wizzopush_action";
+    /** Intent extra on the conversation service: the id the card is posted under (an int). */
+    public static final String EXTRA_NOTIFICATION_ID = "wizzopush_notification_id";
+    public static final String ACTION_REPLY = "reply";
+    public static final String ACTION_READ = "read";
+    /** The RemoteInput key the reply's text arrives under. */
+    public static final String REMOTE_INPUT_KEY = "wizzopush_reply";
     private static final int BUBBLE_HEIGHT_DP = 640;
 
     /** True while the Cordova activity is on screen (set by WizzoPushPlugin onResume/onPause). */
@@ -193,6 +219,7 @@ public final class WizzoPushNotifier {
                     NotificationCompat.BubbleMetadata bubble = bubbleFor(ctx, data, avatar, notificationId);
                     if (bubble != null) builder.setBubbleMetadata(bubble);
                 }
+                addConversationActions(ctx, builder, data, conversationId, notificationId);
             }
         } else if (!isEmpty(imageUrl)) {
             Bitmap big = loadBitmap(ctx, imageUrl, 1024);
@@ -341,6 +368,130 @@ public final class WizzoPushNotifier {
             Log.w(TAG, "Shortcut not published", t);
             return null;
         }
+    }
+
+    // ---------------------------------------------------------------- reply / mark as read
+
+    /**
+     * The reply action (visible, with its text field) and the mark-as-read action (invisible)
+     * of a conversation card, when the app has a service to carry them out. Never throws: an
+     * app without the service, or a failure here, leaves the card exactly as it was.
+     */
+    private static void addConversationActions(Context ctx, NotificationCompat.Builder builder,
+                                               Map<String, String> data, String conversationId,
+                                               int notificationId) {
+        String service = conversationService(ctx);
+        if (service == null) return;
+        try {
+            int icon = smallIcon(ctx);
+            // One PendingIntent per conversation and action: a stable request code keeps
+            // two conversations' replies apart and lets a new push update the same one.
+            PendingIntent reply = serviceIntent(ctx, service, data, ACTION_REPLY, notificationId,
+                ("reply:" + conversationId).hashCode(), true);
+            PendingIntent read = serviceIntent(ctx, service, data, ACTION_READ, notificationId,
+                ("read:" + conversationId).hashCode(), false);
+            if (reply == null || read == null) return;
+
+            RemoteInput input = new RemoteInput.Builder(REMOTE_INPUT_KEY)
+                .setLabel(actionLabel(ctx, "wizzopush_action_reply", "Reply"))
+                .build();
+            NotificationCompat.Action replyAction = new NotificationCompat.Action.Builder(
+                    icon, actionLabel(ctx, "wizzopush_action_reply", "Reply"), reply)
+                .addRemoteInput(input)
+                .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+                .setAllowGeneratedReplies(true)
+                .setShowsUserInterface(false)
+                .build();
+            NotificationCompat.Action readAction = new NotificationCompat.Action.Builder(
+                    icon, actionLabel(ctx, "wizzopush_action_mark_read", "Mark as read"), read)
+                .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+                .setShowsUserInterface(false)
+                .build();
+            builder.addAction(replyAction);
+            builder.addInvisibleAction(readAction);
+        } catch (Throwable t) {
+            Log.w(TAG, "Conversation actions not added", t);
+        }
+    }
+
+    /** The service the app named for replies, or null when it named none. */
+    private static String conversationService(Context ctx) {
+        Bundle meta = metaData(ctx);
+        String service = meta != null ? meta.getString(CONVERSATION_SERVICE_META) : null;
+        return isEmpty(service) ? null : service.trim();
+    }
+
+    private static PendingIntent serviceIntent(Context ctx, String service, Map<String, String> data,
+                                               String action, int notificationId, int requestCode,
+                                               boolean mutable) {
+        Intent intent = new Intent();
+        intent.setClassName(ctx, service);
+        intent.setAction("coffee.sunday.wizzopush." + action);
+        // The address keeps the two actions' intents apart even when the extras match.
+        intent.setData(Uri.parse("wizzopush-action://" + action + "/" + Uri.encode(data.get("conversation_id"))));
+        for (Map.Entry<String, String> entry : data.entrySet()) {
+            intent.putExtra(entry.getKey(), entry.getValue());
+        }
+        intent.putExtra(EXTRA_ACTION, action);
+        intent.putExtra(EXTRA_NOTIFICATION_ID, notificationId);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // A RemoteInput is written INTO the intent by the system, so the reply's must be
+            // mutable; mark-as-read carries nothing and stays immutable.
+            flags |= mutable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                ? PendingIntent.FLAG_MUTABLE : PendingIntent.FLAG_IMMUTABLE;
+        }
+        return PendingIntent.getService(ctx, requestCode, intent, flags);
+    }
+
+    private static String actionLabel(Context ctx, String resName, String fallback) {
+        int id = ctx.getResources().getIdentifier(resName, "string", ctx.getPackageName());
+        if (id != 0) {
+            try { return ctx.getString(id); } catch (Exception ignored) {}
+        }
+        return fallback;
+    }
+
+    /**
+     * A reply the person sent from the card (the phone's inline field, the car, a watch) was
+     * delivered: add it to the thread as their own line, so the card shows it as sent and
+     * Android Auto stops waiting. The card keeps its actions and intents. A null text posts
+     * the card again unchanged (a reply that failed). Returns false when there was no card
+     * any more (nothing to do).
+     */
+    public static boolean appendOwnMessage(Context ctx, int notificationId, CharSequence text) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
+        try {
+            NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return false;
+            for (StatusBarNotification sbn : nm.getActiveNotifications()) {
+                if (sbn.getId() != notificationId) continue;
+                Notification n = sbn.getNotification();
+                NotificationCompat.MessagingStyle style =
+                    NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(n);
+                if (style == null) return false;
+                // The user of the style (null sender) is the person themselves. No text:
+                // the card is posted again as it is, which is what stops the inline field's
+                // spinner when the reply could not be delivered.
+                if (text != null && text.length() > 0) {
+                    style.addMessage(text, System.currentTimeMillis(), (Person) null);
+                }
+                NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, n);
+                b.setStyle(style);
+                // A sent reply is not news: no second sound or vibration.
+                b.setOnlyAlertOnce(true);
+                NotificationManagerCompat.from(ctx).notify(notificationId, b.build());
+                return true;
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "Could not append the reply to the card", t);
+        }
+        return false;
+    }
+
+    /** Mark as read: the card goes. */
+    public static void dismiss(Context ctx, int notificationId) {
+        try { NotificationManagerCompat.from(ctx).cancel(notificationId); } catch (Exception ignored) {}
     }
 
     // ---------------------------------------------------------------- bubble
